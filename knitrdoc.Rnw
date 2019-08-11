@@ -15,6 +15,10 @@
 \usepackage{amsfonts}
 \usepackage{hyperref}
 \usepackage{graphicx}
+\usepackage{setspace} % necessary for Hmisc::latex
+\usepackage{relsize}  % necessary for Hmisc::latex
+\usepackage{longtable}  % necessary for rms model results
+\usepackage{needspace}  % necessary for rms model results
 \usepackage{multirow} % for table cells spanning multiple rows
 
 % Create external files in this document.
@@ -82,9 +86,106 @@
 #opts_knit$set(concordance=TRUE)
 #opts_knit$set(self.contained=FALSE)
 #opts_knit$set(tidy=TRUE)
+options(prType = 'latex') # for Hmisc::latex
 suppressMessages(library(xtable))
-#suppressMessages(library(ggplot2))
+suppressMessages(library(rms))
+suppressMessages(library(tictoc))
+suppressMessages(library(ggplot2))
 sessionInfo()
+@
+
+
+\section{Describe Data}
+<<desc1, cache = TRUE, results = 'asis'>>=
+getHdata(nhgh)
+w <- subset(nhgh, age >= 21 & dx == 0, select = -c(dx, tx))
+tic()
+latex(describe(w[,1:5]), file = '')
+toc()
+@
+
+\newpage
+\section{Model Results}
+<<mod1>>=
+tic()
+lres <- ols(gh ~ rcs(age, 5) + ht * wt + re, data = w)
+ores <- orm(gh ~ rcs(age, 5) + ht * wt + re, family = loglog, data = w)
+toc()
+@
+
+\newpage
+\subsection{Regression Table and Stats}
+<<mod2, results = 'asis'>>=
+lres
+ores
+@
+
+\newpage
+\subsection{Fitted Model}
+<<mod3, results = 'asis'>>=
+latex(lres)
+latex(ores)
+@
+
+\newpage
+\subsection{ANOVA Table}
+<<mod4, results = 'asis'>>=
+(laov <- anova(lres, ht, wt, age, re))
+(oaov <- anova(ores, ht, wt, age, re))
+@
+
+\newpage
+\section{Plots}
+<<mod5>>=
+plot(oaov)
+@
+
+<<stats1>>=
+dd <- datadist(w)
+options(datadist = 'dd')
+meanfun_ores <- Mean(ores)
+qfun_ores <- Quantile(ores)
+q10_ores <- function(x) qfun_ores(0.1, x)
+q50_ores <- function(x) qfun_ores(0.5, x)
+q90_ores <- function(x) qfun_ores(0.9, x)
+pmean_ores <- Predict(ores, age, fun = meanfun_ores, conf.int = FALSE)
+pq10_ores <- Predict(ores, age, fun = q10_ores, conf.int = FALSE)
+pq50_ores <- Predict(ores, age, fun = q50_ores, conf.int = FALSE)
+pq90_ores <- Predict(ores, age, fun = q90_ores, conf.int = FALSE)
+plot1 <- rbind(
+  'ORM Mean' = pmean_ores,
+  'ORM Q10' = pq10_ores,
+  'ORM Q50' = pq50_ores,
+  'ORM Q90' = pq90_ores
+)
+ggplot(plot1,
+#  groups = '.set.',
+  legend.label = 'Prediction')
+@
+
+<<spline1>>=
+mores <- Mean(ores)
+ggplot(Predict(ores, fun = mores), abbrev = TRUE, ylab = NULL)
+@
+
+<<nomo>>=
+ores <- Newlevels(ores, list(re = abbreviate(levels(w$re))))
+exprob <- ExProb(ores)
+plot(nomogram(
+  ores,
+  fun = list(
+    Mean = mores,
+    'Prob(HbA1c >= 7.0)' = function(x) exprob(x, y = 7)
+  ),
+  fun.at = list( # predicted values
+    seq(5, 8, by = 0.5),
+    c(0.01, 0.05, .25, .5)
+  ),
+  interact = list(
+    ht = seq(145, 185, by = 10),
+    wt = seq(45, 165, by = 10)
+  )
+))
 @
 
 

@@ -84,60 +84,68 @@
 #opts_knit$set(tidy=TRUE)
 
 suppressMessages(library(xtable))
-suppressMessages(library(rstan))
+suppressMessages(library(rjags))
+suppressMessages(library(coda))
 suppressMessages(library(tictoc))
 #suppressMessages(library(ggplot2))
 
 options(mc.cores = parallel::detectCores())
-rstan_options(auto_write = TRUE)
 
 sessionInfo()
 @
 
-<<stanCode, cache = TRUE>>=
-code1 <- "
-data {
-  int<lower=0> J;         // number of schools 
-  real y[J];              // estimated treatment effects
-  real<lower=0> sigma[J]; // standard error of effect estimates 
-}
-parameters {
-  real mu;                // population treatment effect
-  real<lower=0> tau;      // standard deviation in treatment effects
-  vector[J] eta;          // unscaled deviation from mu by school
-}
-transformed parameters {
-  vector[J] theta = mu + tau * eta;        // school treatment effects
-}
-model {
-  target += normal_lpdf(eta | 0, 1);       // prior log-density
-  target += normal_lpdf(y | theta, sigma); // log-likelihood
-}
-"
+
+<<jagsCode, cache = TRUE>>=
+fileConn <- file('code.bug')
+writeLines(c(
+'model',
+'{',
+'  for (i in 1:N)',
+'  {',
+'    y[i] ~ dnorm(y.hat[i], tau)',
+'    y.hat[i] <- a + b * x[i]',
+'  }',
+'  a ~ dnorm(0, .0001)',
+'  b ~ dnorm(0, .0001)',
+'  tau <- pow(sigma, -2)',
+'  sigma ~ dunif(0, 100)',
+'}'
+), fileConn)
+close(fileConn)
 @
 
-<<stanDat, cache = TRUE>>=
-schools_dat <- list(
-  J = 8, 
-  y = c(28,  8, -3,  7, -1,  1, 18, 12),
-  sigma = c(15, 10, 16, 11,  9, 11, 10, 18)
+<<jagsDat, cache = TRUE>>=
+N <- 1000
+x <- 1:N
+epsilon <- rnorm(N, 0, 1)
+y <- x + epsilon
+dat <- list(
+  'N' = N,
+  'x' = x,
+  'y' = y
 )
 @
 
-<<stanFit, cache = TRUE, dependson = c('stanDat', 'stanCode')>>=
+<<jagsFit, cache = TRUE, dependson = c('jagsDat', 'jagsCode')>>=
 tic()
-fit1 <- stan(model_code = code1, data = schools_dat)
+fit1 <- jags.model(
+  file = 'code.bug',
+  data = dat,
+  inits = function () {
+    list('a' = rnorm(1, 0, 100),
+         'b' = rnorm(1, 0, 100))
+  },
+  n.chains = 4,
+  n.adapt = 1000
+)
 toc()
 @
 
 <<inspect>>=
-#str(fit1)
-print(fit1)
-plot(fit1, pars = c('mu','tau','eta[1]'))
-traceplot(fit1, pars = c('mu','tau','eta[1]','theta[1]'))
-param_draws <- extract(fit1)
-str(param_draws)
-hist(param_draws$mu, breaks = 40)
+str(fit1)
+csamples <- coda.samples(fit1, c('a','b'), 1000)
+plot(csamples)
+gelman.plot(csamples)
 @
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%

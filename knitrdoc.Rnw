@@ -82,12 +82,63 @@
 #opts_knit$set(concordance=TRUE)
 #opts_knit$set(self.contained=FALSE)
 #opts_knit$set(tidy=TRUE)
+
 suppressMessages(library(xtable))
+suppressMessages(library(rstan))
+suppressMessages(library(tictoc))
 #suppressMessages(library(ggplot2))
-#suppressMessages(library(tictoc))
+
+options(mc.cores = parallel::detectCores())
+rstan_options(auto_write = TRUE)
+
 sessionInfo()
 @
 
+<<stanCode, cache = TRUE>>=
+code1 <- "
+data {
+  int<lower=0> J;         // number of schools 
+  real y[J];              // estimated treatment effects
+  real<lower=0> sigma[J]; // standard error of effect estimates 
+}
+parameters {
+  real mu;                // population treatment effect
+  real<lower=0> tau;      // standard deviation in treatment effects
+  vector[J] eta;          // unscaled deviation from mu by school
+}
+transformed parameters {
+  vector[J] theta = mu + tau * eta;        // school treatment effects
+}
+model {
+  target += normal_lpdf(eta | 0, 1);       // prior log-density
+  target += normal_lpdf(y | theta, sigma); // log-likelihood
+}
+"
+@
+
+<<stanDat, cache = TRUE>>=
+schools_dat <- list(
+  J = 8, 
+  y = c(28,  8, -3,  7, -1,  1, 18, 12),
+  sigma = c(15, 10, 16, 11,  9, 11, 10, 18)
+)
+@
+
+<<stanFit, cache = TRUE, dependson = c('stanDat', 'stanCode')>>=
+tic()
+fit1 <- stan(model_code = code1, data = schools_dat)
+toc()
+@
+
+<<inspect>>=
+#str(fit1)
+print(fit1)
+plot(fit1, pars = c('mu','tau','eta[1]'))
+traceplot(fit1, pars = c('mu','tau','eta[1]','theta[1]'))
+param_draws <- extract(fit1)
+str(param_draws)
+hist(param_draws$mu, breaks = 40)
+@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%% Syntax for generating a figure %%%%%%%%%

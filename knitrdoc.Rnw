@@ -84,6 +84,7 @@
 #opts_knit$set(tidy=TRUE)
 suppressMessages(library(xtable))
 #suppressMessages(library(ggplot2))
+#suppressMessages(library(tictoc))
 sessionInfo()
 @
 

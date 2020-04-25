@@ -83,11 +83,45 @@
 #opts_knit$set(self.contained=FALSE)
 #opts_knit$set(tidy=TRUE)
 suppressMessages(library(xtable))
-#suppressMessages(library(ggplot2))
+suppressMessages(library(ggplot2))
+suppressMessages(library(reshape2))
 #suppressMessages(library(tictoc))
 sessionInfo()
 @
 
+<<binom1>>=
+ns <- seq(10, 1000, 25)
+perfect_df1 <- data.frame(
+  n = ns,
+  ClopperPearson = sapply(
+    ns,
+    FUN=function(x) {
+      binom.test(x,x,alternative='greater')$conf.int[1]
+    }
+  ),
+  Yates = sapply(
+    ns,
+    FUN=function(x) {
+      prop.test(x,x,alternative='greater')$conf.int[1]
+    }
+  )
+)
+perfect_melted1 <- melt(perfect_df1, id.vars = 'n')
+
+(
+  ggplot(
+    perfect_melted1,
+    aes(x=n, y = value, color = variable, group = variable)
+  )
+  + geom_line(size = 1.5)
+  + scale_x_continuous(name = 'N', breaks = seq(10, 100, 10), limits = c(0, 100))
+  + scale_y_continuous('Lower CI', breaks = seq(0.8, 1, 0.05))
+  + theme_bw(base_size = 16)
+  + ggtitle('ggplot example',
+      subtitle = '')
+  + scale_color_discrete(name = 'Method')
+)
+@
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%% Syntax for generating a figure %%%%%%%%%
